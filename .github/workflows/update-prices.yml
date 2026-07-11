@@ -1,0 +1,38 @@
+name: Update fuel prices
+
+on:
+  schedule:
+    - cron: "*/30 * * * *"   # every 30 min (UTC; GitHub may delay under load)
+  workflow_dispatch: {}       # allow manual runs
+
+permissions:
+  contents: write
+
+concurrency:
+  group: update-prices
+  cancel-in-progress: false
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Fetch prices from NSW FuelCheck
+        env:
+          FUELCHECK_API_KEY: ${{ secrets.FUELCHECK_API_KEY }}
+          FUELCHECK_AUTH_BASIC: ${{ secrets.FUELCHECK_AUTH_BASIC }}
+          FUELCHECK_STATION: "18597"
+        run: python3 fetch_prices.py
+
+      - name: Commit prices.json if it changed
+        run: |
+          if [ -n "$(git status --porcelain prices.json)" ]; then
+            git config user.name  "fuel-price-bot"
+            git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+            git add prices.json
+            git commit -m "Update fuel prices ($(date -u +%Y-%m-%dT%H:%MZ))"
+            git push
+          else
+            echo "No price change."
+          fi
